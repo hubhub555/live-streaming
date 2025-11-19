@@ -40,27 +40,29 @@ export default function Card({ video, index }: CardProps) {
         target="_blank"
         rel="noreferrer"
       >
-        <div className="relative w-full overflow-hidden rounded-xl">
-          {imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={video.title || 'ライブ配信のサムネイル'}
-              className="aspect-video w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
-              loading="lazy"
-            />
-          ) : (
-            <div className="aspect-video w-full bg-slate-200 dark:bg-slate-700" />
-          )}
-          <div className="absolute top-2 left-2 flex items-center justify-center gap-1 rounded-full bg-black/50 px-3 py-1 text-sm font-bold text-white backdrop-blur-sm">
-            <span
-              className="material-symbols-outlined text-base"
-              style={{ color: rankColor }}
-            >
-              emoji_events
-            </span>
-            <span>{rank}</span>
-          </div>
-        </div>
+<div className="relative w-full aspect-video overflow-hidden rounded-xl">
+  {imageUrl ? (
+    <img
+      src={imageUrl}
+      alt={video.title || 'ライブ配信のサムネイル'}
+      className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+      loading="lazy"
+    />
+  ) : (
+    <div className="w-full h-full bg-slate-200 dark:bg-slate-700" />
+  )}
+
+  <div className="absolute top-2 left-2 flex items-center justify-center gap-1 rounded-full bg-black/50 px-3 py-1 text-sm font-bold text-white backdrop-blur-sm">
+    <span
+      className="material-symbols-outlined text-base"
+      style={{ color: rankColor }}
+    >
+      emoji_events
+    </span>
+    <span>{rank}</span>
+  </div>
+</div>
+
 
         <div className="flex w-full min-w-72 flex-col justify-center gap-1 py-4">
           <h2 className="text-slate-900 dark:text-white text-lg font-bold">
