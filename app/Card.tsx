@@ -67,7 +67,7 @@ export default function Card({ video, index }: CardProps) {
             {video.title || 'タイトル不明'}
           </h2>
           <p className="text-slate-600 dark:text-[#b89d9f]">
-            {video.platform === 'youtube' ? 'YouTube' : 'ライブ配信'}
+            {video.platform || 'ライブ配信'}
           </p>
         </div>
       </a>

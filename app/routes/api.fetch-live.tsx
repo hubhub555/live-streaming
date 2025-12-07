@@ -1,5 +1,9 @@
 export const loader = async ({ request, context }) => {
-  const API_KEY = context.cloudflare.env.YOUTUBE_API_KEY;
+  // Cloudflare 上では context.cloudflare.env を使う。ローカル開発では process.env をフォールバック
+  const API_KEY =
+    (context?.cloudflare?.env?.YOUTUBE_API_KEY as string) ||
+    process.env.YOUTUBE_API_KEY ||
+    "";
 
   const url = new URL(request.url);
   const q = url.searchParams.get("q") ?? "ゲーム 配信 ライブ";
@@ -32,7 +36,7 @@ export const loader = async ({ request, context }) => {
     .filter(Boolean);
 
   if (videoIds.length === 0) {
-    return Response.json({ data: [] });
+    // YouTube が空でも Twitch のデータは取得してみる（下流で統合）
   }
 
   // ================================
@@ -54,28 +58,112 @@ export const loader = async ({ request, context }) => {
   const videosJson = await videosRes.json();
   const videoItems = videosJson.items ?? [];
 
-  const result = videoItems.map((video) => ({
-    videoId: video.id,
-    title: video.snippet?.title ?? "",
-    thumbnailUrl:
-      video.snippet?.thumbnails?.high?.url ??
-      video.snippet?.thumbnails?.medium?.url ??
-      video.snippet?.thumbnails?.default?.url ??
-      "",
-    viewCount: video.statistics?.viewCount ?? "0",
-    platform: "youtube",
-  }));
+  const youtubeItems = videoItems.map((video) => {
+    const vid = video.id;
+    const viewCount = Number(video.statistics?.viewCount ?? 0);
+    return {
+      id: `youtube_${vid}`,
+      platform: "youtube",
+      title: video.snippet?.title ?? "",
+      thumbnailUrl:
+        video.snippet?.thumbnails?.high?.url ??
+        video.snippet?.thumbnails?.medium?.url ??
+        video.snippet?.thumbnails?.default?.url ??
+        "",
+      viewers: viewCount,
+      url: `https://www.youtube.com/watch?v=${vid}`,
+      raw: {
+        // 必要ならプラットフォーム固有フィールドを残す
+        videoId: vid,
+      },
+    };
+  });
 
-  // ================================
-  // 3) KV に保存
-  // ================================
-  await context.cloudflare.env.LIVE.put(
-    "live-json",
-    JSON.stringify({ live: result })
-  );
+  // Twitch クライアント情報も env から取得（Cloudflare または process.env）
+  const CLIENT_ID =
+    (context?.cloudflare?.env?.TWITCH_CLIENT_ID as string) ||
+    process.env.TWITCH_CLIENT_ID ||
+    "";
+  const CLIENT_SECRET =
+    (context?.cloudflare?.env?.TWITCH_CLIENT_SECRET as string) ||
+    process.env.TWITCH_CLIENT_SECRET ||
+    "";
 
-  // ================================
-  // 4) レスポンス返却
-  // ================================
-  return Response.json({ data: result });
+  // Twitch の取得は失敗しても YouTube データを返せるように try/catch する
+  let twitchItems = [];
+  try {
+    const token = await getTwitchToken(CLIENT_ID, CLIENT_SECRET);
+    const streams = await fetchTwitchStreams(token, CLIENT_ID, maxResults);
+    twitchItems = streams.map((s) => ({
+      id: `twitch_${s.id}`,
+      platform: "twitch",
+      title: s.title ?? "",
+      thumbnailUrl: (s.thumbnail_url || "").replace("{width}", "640").replace("{height}", "360"),
+      viewers: Number(s.viewer_count ?? 0),
+      url: `https://www.twitch.tv/${s.user_login}`,
+      raw: {
+        user_name: s.user_name,
+      },
+    }));
+  } catch (e) {
+    console.error("Twitch fetch failed:", e);
+  }
+
+  // 結合してレスポンスを作る
+  const all = [...youtubeItems, ...twitchItems];
+  const byPlatform = {
+    youtube: youtubeItems,
+    twitch: twitchItems,
+  };
+
+  // KV に保存（Cloudflare が利用可能な場合）
+  try {
+    if (context?.cloudflare?.env?.LIVE?.put) {
+      await context.cloudflare.env.LIVE.put(
+        "live-json",
+        JSON.stringify({ all, byPlatform, updatedAt: new Date().toISOString() })
+      );
+    }
+  } catch (e) {
+    console.error("KV put failed:", e);
+  }
+
+  return Response.json({ all, byPlatform });
 };
+
+async function getTwitchToken(TWITCH_CLIENT_ID: string, TWITCH_CLIENT_SECRET: string) {
+  const url = `https://id.twitch.tv/oauth2/token?client_id=${TWITCH_CLIENT_ID}&client_secret=${TWITCH_CLIENT_SECRET}&grant_type=client_credentials`;
+
+  const res = await fetch(url, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    throw new Error(`tokenの取得に失敗しました: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.access_token; // Bearer token
+}
+
+
+async function fetchTwitchStreams(token: string, TWITCH_CLIENT_ID: string, limit = 10) {
+  const url = `https://api.twitch.tv/helix/streams?first=${limit}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Client-ID": TWITCH_CLIENT_ID,
+      "Authorization": `Bearer ${token}`
+    }
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error("Twitchのストリーム取得に失敗しました:", err);
+    throw new Error(`Twitch API failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.data; // ストリームリスト
+}

@@ -3,11 +3,13 @@ import LiveCard from './Card';
 
 // types.ts
 export interface Video {
-  liveLink: string;
+  id: string;
   platform: 'youtube' | 'twitch' | 'nicovideo' | string;
-  thumbNailLink?: string; // 省略される可能性もあるならオプショナル
-  thumbnailUrl?: string; // あなたのAPIレスポンスに合わせて両方許可
   title?: string;
+  thumbnailUrl?: string;
+  viewers?: number;
+  url?: string;
+  raw?: Record<string, any>;
 }
 
 export default function App() {
@@ -29,9 +31,8 @@ export default function App() {
         const res = await fetch('/api/live');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        setVideos(json.live || []);
-        console.log(json)
-        console.log(videos)
+        // サーバが返す正規化済みの "all" 配列をそのまま使用
+        setVideos(json.all || []);
       } catch (err) {
         console.error('動画データ取得失敗:', err);
       } finally {
@@ -67,10 +68,11 @@ export default function App() {
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4 py-2">
-            {videos.map((v, i) => (
-              <div key={i} className="flex justify-center">
-                <div style={{ width: '80%' }}>
-                  <LiveCard video={v} index={i} />
+            {videos.map((v) => (
+              <div key={v.id} className="flex justify-center">
+                {/* デスクトップ等では幅を30%に抑える。モバイルでの崩れ防止に minWidth を設定 */}
+                <div style={{ width: '80%', minWidth: 220 }}>
+                  <LiveCard video={v} index={0} />
                 </div>
               </div>
             ))}
