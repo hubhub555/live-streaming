@@ -66,9 +66,13 @@ export default function App() {
             動画が見つかりませんでした
           </p>
         ) : (
-          <div className="video-grid">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4 py-2">
             {videos.map((v, i) => (
-              <LiveCard key={i} video={v} index={i} />
+              <div key={i} className="flex justify-center">
+                <div style={{ width: '80%' }}>
+                  <LiveCard video={v} index={i} />
+                </div>
+              </div>
             ))}
           </div>
         )}
